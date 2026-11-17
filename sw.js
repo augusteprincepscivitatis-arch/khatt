@@ -1,0 +1,8 @@
+// offline cache for Khaṭṭ. A new version replaces the old cache.
+const CACHE='khatt-7cbac88a5a', FILES=["./", "index.html", "manifest.webmanifest", "fonts/fonts.css", "fonts/ibm-plex-sans-latin-400-normal.woff2", "fonts/ibm-plex-sans-latin-500-normal.woff2", "fonts/ibm-plex-sans-latin-600-normal.woff2", "fonts/ibm-plex-sans-latin-ext-400-normal.woff2", "fonts/ibm-plex-sans-latin-ext-500-normal.woff2", "fonts/ibm-plex-sans-latin-ext-600-normal.woff2", "fonts/noto-naskh-arabic-arabic-400-normal.woff2", "fonts/noto-naskh-arabic-arabic-600-normal.woff2", "fonts/source-serif-4-latin-400-italic.woff2", "fonts/source-serif-4-latin-400-normal.woff2", "fonts/source-serif-4-latin-600-italic.woff2", "fonts/source-serif-4-latin-600-normal.woff2", "fonts/source-serif-4-latin-ext-400-italic.woff2", "fonts/source-serif-4-latin-ext-400-normal.woff2", "fonts/source-serif-4-latin-ext-600-italic.woff2", "fonts/source-serif-4-latin-ext-600-normal.woff2", "icons/apple-180.png", "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png"];
+self.addEventListener('install',e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting())); });
+self.addEventListener('activate',e=>{ e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())); });
+self.addEventListener('fetch',e=>{ const r=e.request; if(r.method!=='GET') return;
+  if(r.mode==='navigate'){ e.respondWith(fetch(r).then(res=>{ const cp=res.clone(); caches.open(CACHE).then(c=>c.put('index.html',cp)); return res; }).catch(()=>caches.match('index.html'))); return; }
+  e.respondWith(caches.match(r,{ignoreSearch:true}).then(m=>m||fetch(r)));
+});
