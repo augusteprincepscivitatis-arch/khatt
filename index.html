@@ -197,6 +197,17 @@ b.af{color:var(--accent);font-weight:700}
 .fopts{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 12px}
 .fopts button{appearance:none;border:1px solid var(--line2);background:transparent;color:var(--muted);font-family:var(--sans);font-size:14px;border-radius:999px;padding:6px 12px;cursor:pointer}
 .fopts button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+.fbuilt{display:flex;justify-content:center;gap:4px;margin:14px 0 6px;font-family:var(--sans);font-size:24px;font-weight:600}
+.fslot{border-bottom:2px solid var(--line2);min-width:34px;text-align:center;padding:0 4px}
+.fslot.aff{color:var(--accent)}.fslot.empty{color:var(--line2)}
+.frow{margin:8px 0}.frl{font-family:var(--sans);font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}
+.fopts.tiles{margin:0}.fopts.tiles button{font-size:17px;padding:8px 14px;color:var(--ink);min-width:44px}
+.fopts.tiles button:disabled{opacity:.55}
+.fres{font-family:var(--sans);font-weight:700;font-size:15px;text-align:center;margin-top:12px;text-transform:uppercase;letter-spacing:.05em}
+.fres.ok{color:var(--good,#2e7d4f)}.fres.bad{color:var(--bad,#b23a2b)}
+.fex{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line)}
+.fex .ar{font-size:26px}.fex .fl{font-family:var(--sans);font-size:16px}
+.fstat{display:flex;gap:18px;margin:4px 0 8px}.fstat div{display:flex;flex-direction:column}.fstat b{font-family:var(--sans);font-size:26px}.fstat span{font-family:var(--sans);font-size:12px;color:var(--muted)}
 .trchip{appearance:none;border:1px dashed var(--line2);background:transparent;color:var(--muted);font-family:var(--sans);font-size:13px;border-radius:999px;padding:5px 14px;margin:8px auto 0;cursor:pointer;display:table}
 .trshown{margin-top:4px}
 .chip .label.hidename{visibility:hidden}
@@ -1386,50 +1397,132 @@ function cardExtras(w){ const row=h('div',{class:'xrow'}), slot=h('div'), wrap=h
   if(w.pron) row.append(mk(L2('Warum klingt das so?','Why does it sound like this?'),L2('Erklärung ausblenden','Hide explanation'),pronPanel));
   if(FORMS[w.ar]) row.append(mk(L2('Formen','Forms'),L2('Formen ausblenden','Hide forms'),formsPanel));
   return row.children.length?wrap:null; }
-/* ---------- form drill ---------- */
-function formOpts(){ return Object.assign({pres:1,past:1,adj:1},state.formOpts||{}); }
+/* ---------- learning forms: staged intro, building from parts, mastery in-session, spacing over days ---------- */
+// Successive relearning: a missed form comes back in the same session until it is right twice in a row,
+// then returns after 1, 3, 7, 16, 35 … days.
+const F_IV=[0,1,3,7,16,35,80];
+const F_STAGES=[
+  {k:'pres',cells:[0,1,3,4],de:'Gegenwart: die Vorsilben',en:'Present: the prefixes'},
+  {k:'pres',cells:[5,2,6,7],de:'Gegenwart: wir und die Endungen',en:'Present: “we” and the endings'},
+  {k:'past',cells:[0,1,2,5,6],de:'Vergangenheit: ich, du, wir, ihr',en:'Past: I, you, we, you (pl.)'},
+  {k:'past',cells:[4,7],de:'Vergangenheit: sie und sie (Pl.)',en:'Past: she and they'},
+  {k:'f',cells:[null],de:'Adjektive: weiblich',en:'Adjectives: feminine'},
+  {k:'pl',cells:[null],de:'Adjektive: Plural',en:'Adjectives: plural'}];
+const F_RULE={
+  'pres|0':['ich: b‑ vor den Stamm.','I: b‑ before the stem.'],
+  'pres|1':['du (m.): bt‑ vor den Stamm.','you (m.): bt‑ before the stem.'],
+  'pres|3':['er: by‑ vor den Stamm (bei manchen Verben bi‑ oder byi‑).','he: by‑ before the stem (with some verbs bi‑ or byi‑).'],
+  'pres|4':['sie: bt‑ vorne, genau wie bei „du (m.)“.','she: bt‑ in front, the same as “you (m.)”.'],
+  'pres|5':['wir: mn‑ vor den Stamm.','we: mn‑ before the stem.'],
+  'pres|2':['du (w.): bt‑ vorne und ‑i hinten.','you (f.): bt‑ in front and ‑i at the end.'],
+  'pres|6':['ihr: bt‑ vorne und ‑u hinten.','you (pl.): bt‑ in front and ‑u at the end.'],
+  'pres|7':['sie (Pl.): by‑ vorne und ‑u hinten.','they: by‑ in front and ‑u at the end.'],
+  'past|0':['ich: ‑t an den Stamm.','I: ‑t on the stem.'],
+  'past|1':['du (m.): ebenfalls ‑t, gleich wie „ich“.','you (m.): also ‑t, the same as “I”.'],
+  'past|2':['du (w.): ‑ti an den Stamm.','you (f.): ‑ti on the stem.'],
+  'past|5':['wir: ‑na an den Stamm.','we: ‑na on the stem.'],
+  'past|6':['ihr: ‑tu an den Stamm.','you (pl.): ‑tu on the stem.'],
+  'past|4':['sie: ‑et (bei manchen Verben ‑at). Der Stamm sieht dabei oft anders aus: shireb → shirbet.','she: ‑et (with some verbs ‑at). The stem often changes shape: shireb → shirbet.'],
+  'past|7':['sie (Pl.): ‑u. Auch hier ändert sich oft der Stamm: shireb → shirbu.','they: ‑u. Here too the stem often changes: shireb → shirbu.'],
+  'f|':['weiblich: meist ‑e, nach ḥ, ʿ und den dunklen Lauten ‑a.','feminine: mostly ‑e, ‑a after ḥ, ʿ and the dark sounds.'],
+  'pl|':['Plural: entweder ‑īn hinten oder ein Umbau im Wortinneren (kbīr → kbār).','plural: either ‑īn at the end or a change inside the word (kbīr → kbār).']};
+function formOpts(){ return Object.assign({pres:1,past:1,adj:1,per:10},state.formOpts||{}); }
+const fcell=it=>`${it.k}|${it.i==null?'':it.i}`;
+const fkey=it=>`${it.w.ar}|${fcell(it)}`;
+function formItem(it){ return it.F.t==='verb'?it.F[it.k][it.i]:it.F[it.k]; }
+function fStage(it){ return F_STAGES.findIndex(s=>s.k===it.k&&s.cells.includes(it.i==null?null:it.i)); }
 function formPool(){ const o=formOpts(), out=[];
   for(const w of WORDS){ const F=FORMS[w.ar]; if(!F||!knownForward(state.srs&&state.srs[w.ar])) continue;
     if(F.t==='verb'){ if(o.pres) for(let i=0;i<8;i++) out.push({w,F,k:'pres',i}); if(o.past) for(let i=0;i<8;i++) if(i!==3) out.push({w,F,k:'past',i}); }
     else if(o.adj){ out.push({w,F,k:'f'}); if(F.pl) out.push({w,F,k:'pl'}); } }
   return out; }
-const fkey=it=>`${it.w.ar}|${it.k}|${it.i==null?'':it.i}`;
-function fweight(it){ const s=state.fstat&&state.fstat[fkey(it)]; return s?0.6+3*(s.n-s.ok+0.3)/(s.n+0.3):2.5; }
-function formItem(it){ return it.F.t==='verb'?it.F[it.k][it.i]:it.F[it.k]; }
-function stepForm(it){ return (box,api)=>{ const {w,F,k,i}=it; const f=formItem(it);
+function fNewToday(){ const d=dayKey(Date.now()); return state.fday&&state.fday.d===d?state.fday.n:0; }
+function fQueue(){ const now=Date.now(), pool=formPool(), R=state.fsrs||{};
+  const due=pool.filter(it=>R[fkey(it)]&&R[fkey(it)].due<=now).sort((a,b)=>R[fkey(a)].due-R[fkey(b)].due);
+  const left=Math.max(0,formOpts().per-fNewToday());
+  const order=WORDS.map(w=>w.ar);
+  const fresh=pool.filter(it=>!R[fkey(it)]).sort((a,b)=>fStage(a)-fStage(b)||order.indexOf(a.w.ar)-order.indexOf(b.w.ar)||(a.i||0)-(b.i||0));
+  const later=pool.filter(it=>R[fkey(it)]&&R[fkey(it)].due>now).sort((a,b)=>R[fkey(a)].due-R[fkey(b)].due);
+  return {due,nw:fresh.slice(0,left),fresh:fresh.length,later:later[0]?R[fkey(later[0])].due:null,pool:pool.length}; }
+function fSchedule(it,firstOk){ const now=Date.now(); state.fsrs=state.fsrs||{}; const key=fkey(it); const r=state.fsrs[key]||{b:0,n:0,ok:0,lapses:0};
+  r.n++; if(firstOk){ r.ok++; r.b=Math.min(F_IV.length-1,r.b+1); } else { r.lapses++; r.b=1; }
+  r.due=dayStart(now)+F_IV[r.b]*DAY; r.last=now; state.fsrs[key]=r;
+  if(!state.fdone||state.fdone.d!==dayKey(now)) state.fdone={d:dayKey(now),n:0}; state.fdone.n++;
+  save(); }
+// parts of a form: [prefix, stem, suffix]
+function fparts(s,kind){ const p=s.split('|'); if(kind==='pres') return [p[0],p[1],p[2]||'']; return ['',p[0],p[1]||'']; }
+function fChoices(it){ const F=it.F, kind=F.t==='verb'?it.k:'adj';
+  const list=F.t==='verb'?F[it.k].filter((_,j)=>!(it.k==='past'&&j===3)):[F.f,F.pl].filter(Boolean);
+  const P=list.map(f=>fparts(f[0],kind)); if(F.t==='adj') P.push(['',F.m[0],'']);
+  const uniq=a=>[...new Set(a)];
+  return {pre:kind==='pres'?uniq(P.map(p=>p[0])):null, stem:uniq(P.map(p=>p[1])), suf:uniq(['',...P.map(p=>p[2])])}; }
+function fRuleBox(cellKey,examples){ const r=F_RULE[cellKey]; return h('div',{class:'pron'},h('h4',null,L2('Regel','Rule')),h('p',null,L2(r[0],r[1])),
+  examples.length?h('div',null,examples.map(({w,f,kind})=>h('div',{class:'fex'},h('div',null,fseg(f[1],kind,true),' ',fseg(f[0],kind,false),h('div',{class:'small muted'},baseMeaning(w))),speakBtn(plainF(f[1]),f[2])))):null); }
+function stepFormIntro(it){ return (box,api)=>{ const cellKey=fcell(it); const kind=it.F.t==='verb'?it.k:'adj';
+  const ex=formPool().filter(x=>fcell(x)===cellKey).filter((x,j,a)=>a.findIndex(y=>y.w.ar===x.w.ar)===j).slice(0,3).map(x=>({w:x.w,f:formItem(x),kind}));
+  const st=F_STAGES[fStage(it)];
+  box.append(h('div',{class:'prompt'},h('div',{class:'label'},L2('Neu','New')+' · '+L2(st.de,st.en))),
+    h('div',{class:'bigq'},h('div',{class:'en',style:'font-size:26px'},it.F.t==='verb'?L2(PERS[it.i][1],PERS[it.i][2])+' · '+(it.k==='pres'?L2('Gegenwart','present'):L2('Vergangenheit','past')):(it.k==='f'?L2('weiblich','feminine'):L2('Plural','plural')))),
+    fRuleBox(cellKey,ex),
+    h('p',{class:'muted small center'},L2('Hör dir die Beispiele an und sprich sie nach. Danach baust du die Form selbst.','Listen to the examples and repeat them. Then you build the form yourself.')),
+    h('button',{class:'btn primary wide',onclick:()=>{ state.fintro=state.fintro||{}; state.fintro[cellKey]=1; save(); api.next({intro:1}); }},L2('Verstanden','Got it'))); }; }
+function stepFormBuild(it,onResult){ return (box,api)=>{ const {w,F,k,i}=it; const f=formItem(it); const kind=F.t==='verb'?k:'adj';
+  const want=fparts(f[0],kind), C=fChoices(it); const pick=[C.pre?null:'',C.stem.length===1?C.stem[0]:null,null];
   const cue=F.t==='verb'?h('div',{class:'fcue'},L2(PERS[i][1],PERS[i][2]),' · ',k==='pres'?L2('Gegenwart','present'):L2('Vergangenheit','past'))
     :h('div',{class:'fcue'},k==='f'?L2('weiblich','feminine'):L2('Plural (Menschen)','plural (people)'));
-  box.append(h('div',{class:'prompt'},h('div',{class:'label'},L2('Formen üben','Practise forms'))),
-    h('div',{class:'bigq'},h('div',{class:'en',style:'font-size:30px'},baseMeaning(w)),cue,
-      h('div',{class:'fbase'},L2('Grundform: ','Base form: '),ar(w.v),' ',w.tr)));
-  const hint=h('p',{class:'muted small center'},L2('Bilde die Form im Kopf und sprich sie laut. Dann zeig die Lösung.','Build the form in your head and say it out loud. Then show the answer.'));
-  const ans=h('div'), grades=h('div',{class:'grades'});
-  const show=h('button',{class:'btn primary wide',onclick:()=>{ show.remove();
-    const kind=F.t==='verb'?k:'adj';
-    let pat='';
-    if(F.t==='verb'){ const p=f[0].split('|'); pat=k==='pres'?(p[0]+'‑ … '+(p.length===3?'‑'+p[2]:'')):(p.length===2?'… ‑'+p[1]:L2('Grundform ohne Endung','bare base form')); }
-    else { const p=f[0].split('|'); pat=p.length===2?'… ‑'+p[1]:L2('Umbau im Wortinneren','change inside the word'); }
-    ans.append(h('div',{class:'bigq fans',style:'margin-top:6px'},fseg(f[1],kind,true),fseg(f[0],kind,false)),
+  box.append(h('div',{class:'prompt'},h('div',{class:'label'},L2('Formen lernen','Learn forms')+(it._again?' · '+L2('nochmal','again'):''))),
+    h('div',{class:'bigq'},h('div',{class:'en',style:'font-size:30px'},baseMeaning(w)),cue,h('div',{class:'fbase'},L2('Grundform: ','Base form: '),ar(w.v),' ',w.tr)));
+  const shown=h('div',{class:'fbuilt'});
+  const rows=h('div',{class:'frows'}); const fb=h('div'); const btns=h('div',{class:'row',style:'margin-top:10px'});
+  const label=x=>x===''?'–':x;
+  function paint(){ shown.replaceChildren(...[0,1,2].filter(j=>j!==0||C.pre).map(j=>h('span',{class:'fslot'+(pick[j]==null?' empty':'')+(j!==1?' aff':'')},pick[j]==null?'…':label(pick[j]))));
+    check.disabled=pick.some(x=>x==null); }
+  function row(j,title,opts){ if(!opts) return null; return h('div',{class:'frow'},h('div',{class:'frl'},title),h('div',{class:'fopts tiles'},shuffle(opts).map(o=>{ const b=h('button',{class:pick[j]===o?'on':null,onclick:()=>{ if(done) return; pick[j]=o; b.parentNode.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); paint(); }},label(o)); return b; }))); }
+  let done=false;
+  const check=h('button',{class:'btn primary wide',onclick:()=>finish(pick.every((x,j)=>x===want[j]))},L2('Prüfen','Check'));
+  const dunno=h('button',{class:'btn wide',onclick:()=>{ for(let j=0;j<3;j++) if(pick[j]==null) pick[j]='?'; finish(false); }},L2('Weiß ich nicht','I don’t know'));
+  rows.append(...[row(0,L2('vorne','front'),C.pre),row(1,L2('Stamm','stem'),C.stem.length>1?C.stem:null),row(2,L2('hinten','end'),C.suf)].filter(Boolean));
+  btns.append(dunno,check); box.append(shown,rows,fb,btns); paint();
+  function finish(ok){ if(done) return; done=true; rows.querySelectorAll('button').forEach(b=>b.disabled=true);
+    const wrong=[]; if(!ok){ const nm=[L2('Vorne','In front'),L2('Der Stamm','The stem'),L2('Hinten','At the end')];
+      [0,1,2].forEach(j=>{ if(pick[j]===want[j]||pick[j]==='?') return;
+        if(j===0) wrong.push(L2(`Vorne gehört ${want[0]}‑ hin.`,`${want[0]}‑ goes in front.`));
+        else if(j===1) wrong.push(L2(`Der Stamm lautet hier ${want[1]}.`,`The stem here is ${want[1]}.`));
+        else wrong.push(want[2]===''?L2('Hinten kommt hier nichts dazu.','Nothing goes at the end here.'):L2(`Hinten gehört ‑${want[2]} hin.`,`‑${want[2]} goes at the end.`)); }); }
+    fb.append(h('div',{class:'fres '+(ok?'ok':'bad')},ok?L2('Richtig','Right'):L2('So heißt es','It’s')),
+      h('div',{class:'bigq fans',style:'margin-top:4px'},fseg(f[1],kind,true),fseg(f[0],kind,false)),
       h('div',{class:'row',style:'justify-content:center'},speakBtn(plainF(f[1]),f[2])),
-      h('div',{class:'fpat center'},L2('Muster: ','Pattern: '),pat));
-    hint.textContent=L2('Hattest du sie richtig?','Did you get it right?');
-    grades.replaceChildren(h('div',{class:'grade-row two'},
-      h('button',{class:'btn grade g1',onclick:()=>grade(false)},h('b',null,L2('Nicht gewusst','Missed'))),
-      h('button',{class:'btn grade g3',onclick:()=>grade(true)},h('b',null,L2('Gewusst','Got it'))))); }},L2('Lösung zeigen','Show answer'));
-  box.append(hint,ans,h('div',{class:'row',style:'margin-top:10px'},show),grades);
-  function grade(ok){ state.fstat=state.fstat||{}; const key=fkey(it), s=state.fstat[key]||{n:0,ok:0}; s.n++; if(ok) s.ok++; s.t=Date.now(); state.fstat[key]=s; save(); api.next({ok}); }
+      ok?null:h('div',{class:'pron',style:'margin-top:8px'},h('p',null,L2(F_RULE[fcell(it)][0],F_RULE[fcell(it)][1])),wrong.length?h('ul',null,wrong.map(x=>h('li',null,x))):null,
+        h('p',{class:'small'},L2('Kommt in dieser Runde gleich nochmal, bis du sie zweimal hintereinander richtig hast.','Comes back in this round until you get it right twice in a row.'))));
+    speak(plainF(f[1]),f[2]);
+    btns.replaceChildren(h('button',{class:'btn primary wide',onclick:()=>{ onResult(it,ok); api.next({ok}); }},L2('Weiter','Next'))); }
 }; }
-function startFormDrill(){ const pool=formPool(); if(!pool.length){ toast(L2('Noch keine Formen zum Üben.','No forms to practise yet.')); return; }
-  const n=Math.min(10,pool.length); const items=weightedPick(pool,n,fweight);
-  startSession({steps:items.map(stepForm),onFinish:(box,res)=>{ const ok=res.filter(r=>r&&r.ok).length; finishScreen(box,L2('Fertig','Done'),L2(`${ok} von ${res.length} gewusst.`,`${ok} of ${res.length} right.`)); }}); }
-function formsCard(){ const pool=formPool(); const o=formOpts(); const nw=new Set(pool.map(x=>x.w.ar)).size;
+function startFormLearn(){ const q=fQueue(); const base=[]; const nw=q.nw.slice(); let r=0;
+  for(const it of q.due.slice(0,40)){ base.push(it); if(nw.length&&(++r%2===0)) base.push(nw.shift()); } base.push(...nw);
+  if(!base.length){ toast(L2('Gerade ist nichts fällig.','Nothing due right now.')); return; }
+  const st=new Map(); let S=null, newN=0; const introduced=new Set(Object.keys(state.fintro||{}));
+  const steps=[];
+  for(const it of base){ const ck=fcell(it); if(!introduced.has(ck)){ introduced.add(ck); steps.push(stepFormIntro(it)); } steps.push(stepFormBuild(it,onResult)); }
+  function onResult(it,ok){ const key=fkey(it); const s=st.get(key)||{first:null,streak:0,miss:0};
+    if(s.first==null){ s.first=ok; if(!(state.fsrs&&state.fsrs[key])){ newN++; const d=dayKey(Date.now()); if(!state.fday||state.fday.d!==d) state.fday={d,n:0}; state.fday.n++; } }
+    if(ok) s.streak++; else { s.streak=0; s.miss++; }
+    st.set(key,s);
+    const mastered=s.first?true:s.streak>=2;
+    if(mastered){ fSchedule(it,s.first); }
+    else { const again=Object.assign({},it,{_again:1}); const pos=Math.min(S.steps.length,S.i+1+(ok?4:3)); S.steps.splice(pos,0,stepFormBuild(again,onResult)); } }
+  S=startSession({steps,showCount:false,onFinish:(box)=>{ const all=[...st.values()]; const first=all.filter(s=>s.first).length; const q2=fQueue();
+    finishScreen(box,L2('Runde geschafft','Round done'),L2(`${all.length} Formen, ${first} davon auf Anhieb richtig. Alle anderen hast du geübt, bis sie saßen.`,`${all.length} forms, ${first} right first time. You practised the rest until they stuck.`)+(q2.later?' '+L2('Die nächsten sind ','Next ones due ')+(q2.later-Date.now()<DAY?L2('morgen fällig.','tomorrow.'):L2('am '+new Date(q2.later).toLocaleDateString('de-DE')+' fällig.','on '+new Date(q2.later).toLocaleDateString()+'.')):'')); }}); }
+function formsCard(){ const q=fQueue(); const o=formOpts();
   const tog=(key,lab)=>h('button',{class:o[key]?'on':null,'aria-pressed':o[key]?'true':'false',onclick:()=>{ const x=formOpts(); x[key]=x[key]?0:1; if(!x.pres&&!x.past&&!x.adj) return; state.formOpts=x; save(); renderWords(); }},lab);
+  const per=h('div',{class:'fopts'},[5,10,20].map(n=>h('button',{class:o.per===n?'on':null,onclick:()=>{ const x=formOpts(); x.per=n; state.formOpts=x; save(); renderWords(); }},L2(`${n} neue/Tag`,`${n} new/day`))));
   const anyKnown=WORDS.some(w=>FORMS[w.ar]&&knownForward(state.srs&&state.srs[w.ar]));
-  return h('div',{class:'card'},h('h2',null,L2('Formen üben','Practise forms')),
-    h('p',{class:'muted'},anyKnown?L2(`Konjugation und männlich/weiblich für die ${nw} Wörter, die du schon kannst. Formen, die du nicht wusstest, kommen öfter dran.`,`Conjugation and masculine/feminine for the ${nw} words you already know. Forms you missed come back more often.`)
-      :L2('Sobald du ein Verb oder Adjektiv in der täglichen Wiederholung einmal mit Good oder Easy gewusst hast, kannst du hier seine Formen üben.','Once you have rated a verb or adjective Good or Easy in the daily review, you can practise its forms here.')),
-    h('div',{class:'fopts'},tog('pres',L2('Gegenwart','Present')),tog('past',L2('Vergangenheit','Past')),tog('adj',L2('Adjektive','Adjectives'))),
-    h('button',{class:'btn primary',disabled:!pool.length,onclick:startFormDrill},L2('Formen üben','Practise forms'))); }
+  const n=q.due.length+q.nw.length;
+  return h('div',{class:'card'},h('h2',null,L2('Formen lernen','Learn forms')),
+    anyKnown?h('div',{class:'fstat'},h('div',null,h('b',null,String(q.due.length)),h('span',null,L2('fällig','due'))),h('div',null,h('b',null,String(q.nw.length)),h('span',null,L2('neu heute','new today'))),h('div',null,h('b',null,String(formPool().filter(it=>(state.fsrs||{})[fkey(it)]).length)),h('span',null,L2('gelernt','learned')))):null,
+    h('p',{class:'muted'},anyKnown?L2('Neue Muster stellt die App zuerst mit Beispielen vor. Dann baust du die Form aus Vorsilbe, Stamm und Endung. Was falsch war, kommt in derselben Runde wieder, bis es zweimal hintereinander sitzt, und danach nach 1, 3, 7, 16 Tagen und so weiter.','New patterns are first shown with examples. Then you build the form from prefix, stem and ending. Anything you miss comes back in the same round until it is right twice in a row, then after 1, 3, 7, 16 days and so on.')
+      :L2('Sobald du ein Verb oder Adjektiv in der täglichen Wiederholung einmal mit Good oder Easy gewusst hast, kannst du hier seine Formen lernen.','Once you have rated a verb or adjective Good or Easy in the daily review, you can learn its forms here.')),
+    h('div',{class:'fopts'},tog('pres',L2('Gegenwart','Present')),tog('past',L2('Vergangenheit','Past')),tog('adj',L2('Adjektive','Adjectives'))),per,
+    h('button',{class:'btn primary',disabled:!n,onclick:startFormLearn},n?L2('Lernen','Start'):L2('Für heute fertig','Done for today'))); }
 function trChip(w,onShow){ const b=h('button',{class:'trchip',onclick:e=>{ e.stopPropagation(); b.replaceWith(h('div',{class:'muted trshown'},w.tr)); onShow&&onShow(); }},'Show Latin script'); return b; }
 function wordRow(w,onclick){ const unlocked=wordUnlocked(w); const r=state.words[w.ar];
   return h('div',{class:'wordrow'+(unlocked?'':' locked'),onclick:unlocked?onclick:()=>toast(`Unlocks when you learn ${w.unlockBy.name} ${w.unlockBy.ch}`)},
@@ -1555,7 +1648,7 @@ function stepSrs(w,onGraded,dir='p'){ return (box,api)=>{
     const labels=[['Again',1],['Hard',2],['Good',3],['Easy',4]];
     grades.replaceChildren(h('div',{class:'grade-row'},labels.map(([lab,g])=>{ const nx=srsNext(c,g,now,true); return h('button',{class:'btn grade g'+g,onclick:()=>grade(g)},h('b',null,lab),h('span',null,fmtIvl(nx,now))); })));
   }
-  function grade(g){ const now=Date.now(); state.srs=state.srs||{}; const nx=srsNext(c,g,now); if(!rd&&g>=3) nx.good=((c&&c.good)||0)+1; state.srs[key]=nx;
+  function grade(g){ if(g===1) toast(L2('Kommt in ein paar Karten nochmal.','Comes back in a few cards.')); const now=Date.now(); state.srs=state.srs||{}; const nx=srsNext(c,g,now); if(!rd&&g>=3) nx.good=((c&&c.good)||0)+1; state.srs[key]=nx;
     if(isNew){ const k=dayKey(now), same=state.srsDay&&state.srsDay.d===k; state.srsDay={d:k,n:(same?state.srsDay.n:0)+(rd?0:1),r:(same?(state.srsDay.r||0):0)+(rd?1:0)}; }
     bumpWord(w.ar,g===1?-1:g===2?0.2:g===3?0.6:1);
     onGraded&&onGraded(w,nx,g,dir); api.next({g}); }
@@ -1661,7 +1754,7 @@ const startTab=location.hash.slice(1); setTab(['alphabet','practice','words'].in
 initCloud();
 if(IS_PWA){ try{ if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js'); }catch(e){} try{ navigator.storage&&navigator.storage.persist&&navigator.storage.persist(); }catch(e){} }
 if(importedNote) setTimeout(()=>toast(importedNote),400);
-window.__khatt={pronPanel,pronToggle,formsPanel,formPool,startFormDrill,FORMS,cardExtras,LETTERS,WORDS,matchStroke,evaluateLetter,evaluateLetterCore,evaluateWord,Pad,TH,state:()=>state,portable,importProgress,b64uEnc,b64uDec,srsNext,srsQueue,startSrsReview,dayStart,startEditor,crPts,rdpJS,snapStroke,applyCustom,COMPARE,soundComparisons,resample,parsePath,matchDots,dotGroupMatch,DOT_TOL,smoothStroke};
+window.__khatt={pronPanel,pronToggle,formsPanel,formPool,startFormLearn,fQueue,fChoices,FORMS,cardExtras,LETTERS,WORDS,matchStroke,evaluateLetter,evaluateLetterCore,evaluateWord,Pad,TH,state:()=>state,portable,importProgress,b64uEnc,b64uDec,srsNext,srsQueue,startSrsReview,dayStart,startEditor,crPts,rdpJS,snapStroke,applyCustom,COMPARE,soundComparisons,resample,parsePath,matchDots,dotGroupMatch,DOT_TOL,smoothStroke};
 </script>
 </body>
 </html>
