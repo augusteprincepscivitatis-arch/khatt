@@ -1459,7 +1459,11 @@ const F_RULE={
   'ps|7':['sie (Pl.): ‑on (biddon); nach einem Vokal ‑hon (fīhon).','they: ‑on (biddon); after a vowel ‑hon (fīhon).'],
   'f|':['weiblich: meist ‑e, nach ḥ, ʿ und den dunklen Lauten ‑a.','feminine: mostly ‑e, ‑a after ḥ, ʿ and the dark sounds.'],
   'pl|':['Plural: entweder ‑īn hinten oder ein Umbau im Wortinneren (kbīr → kbār).','plural: either ‑īn at the end or a change inside the word (kbīr → kbār).']};
-function formOpts(){ return Object.assign({pres:1,past:1,adj:1,per:10},state.formOpts||{}); }
+function formOpts(){ return Object.assign({pres:1,past:1,adj:1,per:20,known:0},state.formOpts||{}); }
+const ALL=9999;
+function roundN(){ return state.roundN||20; }
+const limLabel=n=>n>=ALL?L2('alle','all'):String(n);
+function limSeg(opts,cur,set){ return h('div',{class:'seg'},opts.map(v=>h('button',{class:cur===v?'on':null,'aria-pressed':cur===v?'true':'false',onclick:()=>{ set(v); save(); renderWords(); }},limLabel(v)))); }
 const todayBonus=k=>{ const b=state.bonus&&state.bonus[k]; return b&&b.d===dayKey(Date.now())?b.n:0; };
 function addBonus(k,n){ state.bonus=state.bonus||{}; const d=dayKey(Date.now()); const b=state.bonus[k]; state.bonus[k]={d,n:(b&&b.d===d?b.n:0)+n}; save(); }
 const fcell=it=>`${it.k}|${it.i==null?'':it.i}`;
@@ -1467,7 +1471,7 @@ const fkey=it=>`${it.w.ar}|${fcell(it)}`;
 function formItem(it){ return it.F.t==='verb'?it.F[it.k][it.i]:it.F.t==='ps'?it.F.pres[it.i]:it.F[it.k]; }
 function fStage(it){ return F_STAGES.findIndex(s=>s.k===it.k&&s.cells.includes(it.i==null?null:it.i)); }
 function formPool(){ const o=formOpts(), out=[];
-  for(const w of WORDS){ const F=FORMS[w.ar]; if(!F||!knownForward(state.srs&&state.srs[w.ar])) continue;
+  for(const w of WORDS){ const F=FORMS[w.ar]; if(!F||!wordUnlocked(w)||(o.known&&!knownForward(state.srs&&state.srs[w.ar]))) continue;
     if(F.t==='verb'){ if(o.pres) for(let i=0;i<8;i++) out.push({w,F,k:'pres',i}); if(o.past) for(let i=0;i<8;i++) if(i!==3) out.push({w,F,k:'past',i}); }
     else if(F.t==='ps'){ if(o.pres) for(let i=0;i<8;i++) out.push({w,F,k:'ps',i}); }
     else if(o.adj){ out.push({w,F,k:'f'}); if(F.pl) out.push({w,F,k:'pl'}); } }
@@ -1536,7 +1540,7 @@ function stepFormBuild(it,onResult){ return (box,api)=>{ const {w,F,k,i}=it; con
 }; }
 function startFormExtra(){ const R=state.fsrs||{}; const pool=formPool().filter(it=>R[fkey(it)]);
   if(!pool.length){ toast(L2('Noch keine gelernten Formen.','No learned forms yet.')); return; }
-  const items=weightedPick(pool,Math.min(15,pool.length),it=>{ const r=R[fkey(it)]; return 1+2*(r.lapses||0)+(r.b<=2?2:0); }).map(it=>Object.assign({},it,{_extra:1}));
+  const items=weightedPick(pool,Math.min(roundN(),pool.length),it=>{ const r=R[fkey(it)]; return 1+2*(r.lapses||0)+(r.b<=2?2:0); }).map(it=>Object.assign({},it,{_extra:1}));
   const st=new Map(); let S=null;
   function onResult(it,ok){ const key=fkey(it); const s=st.get(key)||{first:null,streak:0}; if(s.first==null) s.first=ok; s.streak=ok?s.streak+1:0; st.set(key,s);
     if(!(s.first||s.streak>=2)){ const again=Object.assign({},it,{_again:1}); S.steps.splice(Math.min(S.steps.length,S.i+1+(ok?4:3)),0,stepFormBuild(again,onResult)); } }
@@ -1544,7 +1548,7 @@ function startFormExtra(){ const R=state.fsrs||{}; const pool=formPool().filter(
     finishScreen(box,L2('Extra-Runde geschafft','Extra round done'),L2(`${all.length} Formen, ${first} auf Anhieb richtig. Die Extra-Runde verschiebt keine Termine.`,`${all.length} forms, ${first} right first time. Extra rounds do not change the schedule.`));
     box.append(h('button',{class:'btn wide',style:'margin-top:8px',onclick:startFormExtra},L2('Noch eine Extra-Runde','Another extra round'))); }}); }
 function startFormLearn(){ const q=fQueue(); const base=[]; const nw=q.nw.slice(); let r=0;
-  for(const it of q.due.slice(0,40)){ base.push(it); if(nw.length&&(++r%2===0)) base.push(nw.shift()); } base.push(...nw);
+  for(const it of q.due){ base.push(it); if(nw.length&&(++r%2===0)) base.push(nw.shift()); } base.push(...nw);
   if(!base.length){ toast(L2('Gerade ist nichts fällig.','Nothing due right now.')); return; }
   const st=new Map(); let S=null, newN=0; const introduced=new Set(Object.keys(state.fintro||{}));
   const steps=[];
@@ -1561,12 +1565,13 @@ function startFormLearn(){ const q=fQueue(); const base=[]; const nw=q.nw.slice(
     finishScreen(box,L2('Runde geschafft','Round done'),L2(`${all.length} Formen, ${first} davon auf Anhieb richtig. Alle anderen hast du geübt, bis sie saßen.`,`${all.length} forms, ${first} right first time. You practised the rest until they stuck.`)+(q2.later?' '+L2('Die nächsten sind ','Next ones due ')+(q2.later-Date.now()<DAY?L2('morgen fällig.','tomorrow.'):L2('am '+new Date(q2.later).toLocaleDateString('de-DE')+' fällig.','on '+new Date(q2.later).toLocaleDateString()+'.')):'')); }}); }
 function formsCard(){ const q=fQueue(); const o=formOpts();
   const tog=(key,lab)=>h('button',{class:o[key]?'on':null,'aria-pressed':o[key]?'true':'false',onclick:()=>{ const x=formOpts(); x[key]=x[key]?0:1; if(!x.pres&&!x.past&&!x.adj) return; state.formOpts=x; save(); renderWords(); }},lab);
-  const per=h('div',{class:'fopts'},[5,10,20].map(n=>h('button',{class:o.per===n?'on':null,onclick:()=>{ const x=formOpts(); x.per=n; state.formOpts=x; save(); renderWords(); }},L2(`${n} neue/Tag`,`${n} new/day`))));
-  const anyKnown=WORDS.some(w=>FORMS[w.ar]&&knownForward(state.srs&&state.srs[w.ar]));
+  const per=h('div',null,h('div',{class:'label',style:'margin-top:10px'},L2('Neue Formen pro Tag','New forms per day')),limSeg([5,10,20,50,ALL],o.per,v=>{ const x=formOpts(); x.per=v; state.formOpts=x; }),
+    h('div',{class:'fopts',style:'margin-top:8px'},h('button',{class:o.known?'on':null,'aria-pressed':o.known?'true':'false',onclick:()=>{ const x=formOpts(); x.known=x.known?0:1; state.formOpts=x; save(); renderWords(); }},L2('Nur Wörter, die ich schon kann','Only words I already know'))));
+  const anyKnown=formPool().length>0;
   const n=q.due.length+q.nw.length;
   return h('div',{class:'card'},h('h2',null,L2('Formen lernen','Learn forms')),
     anyKnown?h('div',{class:'fstat'},h('div',null,h('b',null,String(q.due.length)),h('span',null,L2('fällig','due'))),h('div',null,h('b',null,String(q.nw.length)),h('span',null,L2('neu heute','new today'))),h('div',null,h('b',null,String(formPool().filter(it=>(state.fsrs||{})[fkey(it)]).length)),h('span',null,L2('gelernt','learned')))):null,
-    h('p',{class:'muted'},anyKnown?L2('Neue Muster stellt die App zuerst mit Beispielen vor. Dann baust du die Form aus Vorsilbe, Stamm und Endung. Was falsch war, kommt in derselben Runde wieder, bis es zweimal hintereinander sitzt, und danach nach 1, 3, 7, 16 Tagen und so weiter.','New patterns are first shown with examples. Then you build the form from prefix, stem and ending. Anything you miss comes back in the same round until it is right twice in a row, then after 1, 3, 7, 16 days and so on.')
+    h('p',{class:'muted'},anyKnown||!o.known?L2('Neue Muster stellt die App zuerst mit Beispielen vor. Dann baust du die Form aus Vorsilbe, Stamm und Endung. Was falsch war, kommt in derselben Runde wieder, bis es zweimal hintereinander sitzt, und danach nach 1, 3, 7, 16 Tagen und so weiter.','New patterns are first shown with examples. Then you build the form from prefix, stem and ending. Anything you miss comes back in the same round until it is right twice in a row, then after 1, 3, 7, 16 days and so on.')
       :L2('Sobald du ein Verb oder Adjektiv in der täglichen Wiederholung einmal mit Good oder Easy gewusst hast, kannst du hier seine Formen lernen.','Once you have rated a verb or adjective Good or Easy in the daily review, you can learn its forms here.')),
     h('div',{class:'fopts'},tog('pres',L2('Gegenwart','Present')),tog('past',L2('Vergangenheit','Past')),tog('adj',L2('Adjektive','Adjectives'))),per,
     h('div',{class:'row'},h('button',{class:'btn primary',disabled:!n,onclick:startFormLearn},n?L2('Lernen','Start'):L2('Alles Fällige erledigt','All due done')),
@@ -1605,7 +1610,7 @@ const SB_N={'قهوة':['Kaffee','keinen Kaffee','coffee'],'شاي':['Tee','kein
  'مصاري':['Geld','kein Geld','money'],'سيارة':['ein Auto','kein Auto','a car'],'بيت':['ein Haus','kein Haus','a house']};
 const SB_T={'بكرا':['morgen','tomorrow','fut'],'اليوم':['heute','today','pres'],'هلق':['jetzt','now','pres'],'مبارح':['gestern','yesterday','past']};
 const SB_GLUE=['بدي','شرب','قهوة','ما','في','عندي','فيي','رح','لازم','شو','أكل','خبز'];
-const sbKnown=a=>!!WBY[a]&&knownForward(state.srs&&state.srs[a]);
+const sbKnown=a=>!!WBY[a]&&wordUnlocked(WBY[a])&&(!state.sbKnownOnly||knownForward(state.srs&&state.srs[a]));
 const sbW=a=>{ const w=WBY[a]; return {lat:w.p,ar:w.v,say:w.say,src:'w'}; };
 const sbF=(f,src)=>({lat:plainF(f[0]),ar:plainF(f[1]),say:f[2],src});
 const sbRnd=a=>a[(Math.random()*a.length)|0];
@@ -1655,8 +1660,8 @@ function sbMake(fr,ctx){ const p=(Math.random()*8)|0, p3=p===3||p===4; const cap
     if(!have) return {fr,toks,dis,de:`Es gibt ${neg?n[1]:n[0]}.`,en:`There ${pl?'are':'is'} ${neg?'no '+enN.replace(/^a /,''):enN}.`};
     return {fr,toks,dis,de:`${SB_PD[p]} ${SB_M.haben[p]} ${neg?n[1]:n[0]}.`,en:neg?`${SB_PE[p]} ${p3?"doesn't":"don't"} have ${/^a /.test(enN)?enN:'any '+enN}.`:`${SB_PE[p]} ${p3?'has':'have'} ${enN}.`}; }
   return null; }
-function sbBatch(n){ const ctx=sbCtx(); if(!ctx.fr.length) return []; const out=[]; let guard=0, fi=0; const order=shuffle(ctx.fr);
-  while(out.length<n&&guard++<200){ const s=sbMake(order[fi++%order.length],ctx); if(!s) continue; const key=s.toks.map(t=>t.lat).join(' '); if(out.some(x=>x.key===key)) continue; s.key=key;
+function sbBatch(n){ const ctx=sbCtx(); if(!ctx.fr.length) return []; n=Math.min(n,200); const out=[]; let guard=0, fi=0; const order=shuffle(ctx.fr);
+  while(out.length<n&&guard++<n*25){ const s=sbMake(order[fi++%order.length],ctx); if(!s) continue; const key=s.toks.map(t=>t.lat).join(' '); if(out.some(x=>x.key===key)) continue; s.key=key;
     const seen=new Set(s.toks.map(t=>t.lat)); s.dis=s.dis.filter(d=>{ if(seen.has(d.lat)) return false; seen.add(d.lat); return true; }).slice(0,3); out.push(s); }
   return out; }
 function sbTile(t,onclick){ return h('button',{class:'sbt',onclick},h('span',{class:'ar',lang:'ar',dir:'rtl'},t.ar),h('span',{class:'sbl'},t.lat)); }
@@ -1688,7 +1693,7 @@ function stepSentence(s,onResult){ return (box,api)=>{
     speak(arS.replace('؟',''),say);
     btns.replaceChildren(h('button',{class:'btn primary wide',onclick:()=>{ onResult(s,ok); api.next({ok}); }},L2('Weiter','Next'))); }
 }; }
-function startSentences(){ const batch=sbBatch(10); if(!batch.length){ toast(L2('Lerne zuerst ein paar Grundwörter.','Learn a few core words first.')); return; }
+function startSentences(){ const batch=sbBatch(roundN()); if(!batch.length){ toast(L2('Lerne zuerst ein paar Grundwörter.','Learn a few core words first.')); return; }
   const st=new Map(); let S=null;
   function onResult(s,ok){ const r=st.get(s.key)||{first:null,streak:0}; if(r.first==null) r.first=ok; r.streak=ok?r.streak+1:0; st.set(s.key,r);
     if(!(r.first||r.streak>=2)){ const again=Object.assign({},s,{_again:1}); S.steps.splice(Math.min(S.steps.length,S.i+1+(ok?4:3)),0,stepSentence(again,onResult)); }
@@ -1700,10 +1705,11 @@ function sentencesCard(){ const ctx=sbCtx(); const missing=SB_GLUE.filter(a=>WBY
   const kinds={pres:L2('ich trinke …','I drink …'),past:L2('ich habe … getrunken','I drank …'),q:L2('was trinkst du?','what do you drink?'),want:L2('ich will …','I want to …'),can:L2('ich kann …','I can …'),must:L2('ich muss …','I have to …'),fut:L2('ich werde …','I will …'),fi:L2('es gibt …','there is …'),have:L2('ich habe …','I have …')};
   const have=ctx.fr.filter(f=>kinds[f]).map(f=>kinds[f]);
   return h('div',{class:'card'},h('h2',null,L2('Sätze bauen','Build sentences')),
-    h('p',{class:'muted'},ctx.fr.length?L2('Die App baut Sätze nur aus Wörtern, die du schon kannst. Du setzt sie aus Bausteinen zusammen. Mit jedem neuen Wort gibt es mehr Sätze.','The app builds sentences only from words you already know, and you put them together from pieces. Every new word adds more sentences.')
+    h('p',{class:'muted'},ctx.fr.length?(state.sbKnownOnly?L2('Die App baut Sätze aus Wörtern, die du schon kannst. Mit jedem neuen Wort gibt es mehr Sätze.','The app builds sentences from words you already know. Every new word adds more sentences.'):L2('Die App baut Sätze aus allen Wörtern der App. Du setzt sie aus Bausteinen zusammen.','The app builds sentences from all words in the app. You put them together from pieces.'))
       :L2('Dafür brauchst du ein paar Grundwörter aus der täglichen Wiederholung. Die kommen jetzt als Erstes dran.','This needs a few core words from the daily review. They now come first.')),
     have.length?h('p',{class:'small'},L2('Schon möglich: ','Already possible: ')+have.join(' · ')):null,
     missing.length?h('p',{class:'small muted'},L2('Schaltet mehr frei: ','Unlocks more: '),missing.slice(0,6).map((a,i)=>[i?', ':'',h('span',{class:'arin'},WBY[a].v),' ',WBY[a].p])):null,
+    h('div',{class:'fopts',style:'margin-top:8px'},h('button',{class:state.sbKnownOnly?'on':null,'aria-pressed':state.sbKnownOnly?'true':'false',onclick:()=>{ state.sbKnownOnly=state.sbKnownOnly?0:1; save(); renderWords(); }},L2('Nur Wörter, die ich schon kann','Only words I already know'))),
     h('button',{class:'btn primary',disabled:!ctx.fr.length,onclick:startSentences},L2('Los','Start'))); }
 /* ---------- how the forms are built ---------- */
 function bsRow(parts,result,meaning){ return h('div',{class:'bsrow'},h('div',{class:'bsparts'},parts.map(([t,lab,k])=>h('span',{class:'bsp '+(k||'')},h('b',null,t),h('small',null,lab)))),
@@ -1847,7 +1853,7 @@ const SRS={steps:[1,10],relearn:[10],grad:1,easy:4,ease0:2.5,hard:1.2,bonus:1.3,
 const MIN=60000, DAY=86400000;
 function dayStart(t){ const d=new Date(t-4*3600000); d.setHours(0,0,0,0); return d.getTime()+4*3600000; } // a new day starts at 4:00, as in Anki
 function dayKey(t){ const d=new Date(dayStart(t)); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
-function newPerDayBase(){ return state.srsNew||10; }
+function newPerDayBase(){ return state.srsNew||20; }
 function newPerDay(){ return newPerDayBase()+todayBonus('words'); }
 function newToday(){ const s=state.srsDay; return s&&s.d===dayKey(Date.now())?s.n:0; }
 function fuzz(ivl){ return ivl<3?ivl:Math.max(1,Math.round(ivl*(0.95+Math.random()*0.1))); }
@@ -1914,7 +1920,7 @@ function stepSrs(w,onGraded,dir='p',opt={}){ return (box,api)=>{
 function startSrsExtra(){ const S0=state.srs||{};
   const cards=Object.entries(S0).filter(([k,c])=>c&&c.q!=='new').map(([k,c])=>({k,c,dir:k.endsWith('|r')?'r':'p',w:WBY[k.endsWith('|r')?k.slice(0,-2):k]})).filter(x=>x.w&&wordUnlocked(x.w));
   if(!cards.length){ toast(L2('Noch keine gelernten Wörter.','No learned words yet.')); return; }
-  const pick=weightedPick(cards,Math.min(20,cards.length),x=>1+2*(x.c.lapses||0)+(x.c.q!=='review'?2:0)+Math.max(0,(2.6-(x.c.ease||2.5))*4));
+  const pick=weightedPick(cards,Math.min(roundN(),cards.length),x=>1+2*(x.c.lapses||0)+(x.c.q!=='review'?2:0)+Math.max(0,(2.6-(x.c.ease||2.5))*4));
   const st=new Map(); let S=null;
   const onCram=(w,dir,ok)=>{ const key=w.ar+'|'+dir; const s=st.get(key)||{first:null,streak:0}; if(s.first==null) s.first=ok; s.streak=ok?s.streak+1:0; st.set(key,s);
     if(!(s.first||s.streak>=2)) S.steps.splice(Math.min(S.steps.length,S.i+1+3),0,stepSrs(w,null,dir,{cram:true,again:true,onCram})); };
@@ -2007,7 +2013,9 @@ function renderWords(){
       h('button',{class:'btn',disabled:!Object.values(state.srs||{}).some(c=>c&&c.q!=='new'),onclick:startSrsExtra},L2('Extra-Runde','Extra round')),
       h('button',{class:'btn',disabled:!unlockedWords().some(w=>!(state.srs||{})[w.ar]),onclick:()=>{ addBonus('words',5); renderWords(); }},L2('+5 neue heute','+5 new today'))),
     h('div',{class:'label',style:'margin-top:14px'},'Meanings in'), segOf([['de','Deutsch'],['en','English']],meaningLang(),v=>state.lang=v,'Meaning language'),
-    h('div',{class:'label',style:'margin-top:12px'},'New words per day'), segOf([[5,'5'],[10,'10'],[20,'20']],newPerDayBase(),v=>state.srsNew=v,'New words per day')),
+    h('div',{class:'label',style:'margin-top:12px'},L2('Neue Wörter pro Tag','New words per day')), limSeg([5,10,20,50,ALL],newPerDayBase(),v=>state.srsNew=v),
+    h('div',{class:'label',style:'margin-top:12px'},L2('Länge von Extra- und Satz-Runden','Length of extra and sentence rounds')), limSeg([10,20,50,ALL],roundN(),v=>state.roundN=v),
+    h('p',{class:'small muted',style:'margin-top:8px'},L2('Alles hier bestimmst du. Nur eins zur Info: Jedes neue Wort kommt in den nächsten Tagen und Wochen zur Wiederholung zurück. Viele neue Wörter auf einmal heißen also bald viele Wiederholungen pro Tag.','You decide all of this. Just so you know: every new word comes back for review over the following days and weeks, so many new words at once soon mean many reviews per day.'))),
     h('div',{class:'card'},h('h2',null,un.length?`${un.length} words unlocked`:'Words'),
     h('p',{class:'muted'},un.length?`${written} written so far. Every word uses only letters you know.`:`Learn alif and bāʾ and your first word appears.`),
     h('div',{class:'row',style:'margin-top:10px'},h('button',{class:'btn primary',disabled:!tr,onclick:()=>{ const pool=trainedWords(); const w=pool.find(x=>!(state.words[x.ar]&&state.words[x.ar].w))||weightedPick(pool,1,wordWeight)[0]; startWordLesson(w);}},'Write a word'),h('button',{class:'btn',disabled:tr<2,onclick:startWordDrill},'Word drill')), h('div',{class:'disabled-note'},!tr?'Writing starts once you have met words in the daily review.':tr<2?'The word drill needs two words you have met in the review.':`Writing and the word drill use the ${tr} word${tr!==1?'s':''} you have met.`)),formsCard()];
